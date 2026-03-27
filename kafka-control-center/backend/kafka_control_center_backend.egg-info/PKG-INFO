@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: kafka-control-center-backend
+Version: 0.1.0
+Summary: Modern Kafka control center backend (FastAPI)
+Requires-Python: >=3.10
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: pydantic
+Requires-Dist: python-dotenv
+Requires-Dist: confluent-kafka
+Requires-Dist: anthropic
+Requires-Dist: jinja2
+Requires-Dist: aiofiles

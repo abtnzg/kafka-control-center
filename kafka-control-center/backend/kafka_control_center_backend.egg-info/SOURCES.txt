@@ -1,0 +1,15 @@
+pyproject.toml
+app/__init__.py
+app/ai_service.py
+app/config.py
+app/kafka_service.py
+app/main.py
+app/routers/__init__.py
+app/routers/ai.py
+app/routers/clusters.py
+app/routers/topics.py
+kafka_control_center_backend.egg-info/PKG-INFO
+kafka_control_center_backend.egg-info/SOURCES.txt
+kafka_control_center_backend.egg-info/dependency_links.txt
+kafka_control_center_backend.egg-info/requires.txt
+kafka_control_center_backend.egg-info/top_level.txt
