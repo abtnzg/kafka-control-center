@@ -1,4 +1,4 @@
-#!/home/ubuntu/az400/kafka-control-center/kafka-control-center/backend/venv/bin/python3.12
+#!/home/ubuntu/kafka-control-center/kafka-control-center/backend/venv/bin/python3.12
 # -*- coding: utf-8 -*-
 import re
 import sys

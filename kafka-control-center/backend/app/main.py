@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import clusters, topics, ai, ws  # <--- IMPORTANT
+from app.config import get_settings
+from app.routers import clusters, topics, consumer_groups, ws
 
-app = FastAPI(title="Kafka Control Center API")
+settings = get_settings()
+
+app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,12 +17,5 @@ app.add_middleware(
 
 app.include_router(clusters.router)
 app.include_router(topics.router)
-app.include_router(ai.router)
-app.include_router(ws.router)  # <--- IMPORTANT
-
-from app.routers import brokers, consumer_groups, topics, ws
-
-app.include_router(brokers.router)
 app.include_router(consumer_groups.router)
-app.include_router(topics.router)
 app.include_router(ws.router)

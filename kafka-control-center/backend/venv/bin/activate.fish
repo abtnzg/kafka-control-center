@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/ubuntu/az400/kafka-control-center/kafka-control-center/backend/venv
+set -gx VIRTUAL_ENV /home/ubuntu/kafka-control-center/kafka-control-center/backend/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

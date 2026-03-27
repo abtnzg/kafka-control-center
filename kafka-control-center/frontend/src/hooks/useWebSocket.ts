@@ -1,21 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export function useWebSocket(url: string) {
-  const [data, setData] = useState<any>(null);
+export function useWebSocket<T = unknown>(url: string | null) {
+  const [messages, setMessages] = useState<T[]>([]);
+  const [connected, setConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(url);
+    if (!url) return;
 
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
     ws.onmessage = (event) => {
       try {
-        setData(JSON.parse(event.data));
+        const data = JSON.parse(event.data) as T;
+        setMessages((prev) => [data, ...prev].slice(0, 200));
       } catch {
-        setData(event.data);
+        // ignore
       }
     };
 
-    return () => ws.close();
+    return () => {
+      ws.close();
+    };
   }, [url]);
 
-  return data;
+  return { messages, connected };
 }
