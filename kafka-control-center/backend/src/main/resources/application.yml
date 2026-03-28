@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: kafkamind
+
+  # Database (H2 pour dev, PostgreSQL pour prod)
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:kafkamind}
+    username: ${DATABASE_USER:sa}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# JWT
+app:
+  jwt:
+    secret: ${JWT_SECRET:kafkamind-super-secret-key-change-in-production-min-256-bits}
+    expiration: 86400000  # 24h en ms
+
+  # Anthropic API
+  anthropic:
+    api-key: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-20250514
+    max-tokens: 4096
+
+# Logging
+logging:
+  level:
+    com.kafkamind: DEBUG
+    org.springframework.security: WARN
+    org.apache.kafka: WARN
+
+  kafka:
+    bootstrap-servers: localhost:9092

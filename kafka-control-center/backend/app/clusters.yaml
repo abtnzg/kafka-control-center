@@ -1,4 +1,0 @@
-clusters:
-  - id: local
-    name: Local Kafka
-    bootstrap_servers: localhost:9092
