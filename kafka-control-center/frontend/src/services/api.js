@@ -27,11 +27,15 @@ export const authApi = {
 };
 
 export const clusterApi = {
-  list:   ()        => api.get("/clusters"),
-  add:    (data)    => api.post("/clusters", data),
-  update: (id, data)=> api.put(`/clusters/${id}`, data),
-  remove: (id)      => api.delete(`/clusters/${id}`),
-  health: (id)      => api.get(`/clusters/${id}/health`),
+  list:      ()         => api.get("/clusters"),
+  add:       (data)     => api.post("/clusters", data),
+  update:    (id, data) => api.put(`/clusters/${id}`, data),
+  remove:    (id)       => api.delete(`/clusters/${id}`),
+  health:    (id)       => api.get(`/clusters/${id}/health`),
+  brokers:   (id)       => api.get(`/clusters/${id}/brokers`),
+  listAcls:  (id)       => api.get(`/clusters/${id}/acls`),
+  createAcl: (id, data) => api.post(`/clusters/${id}/acls`, data),
+  deleteAcl: (id, data) => api.delete(`/clusters/${id}/acls`, { data }),
 };
 
 export const topicApi = {

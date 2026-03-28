@@ -10,12 +10,14 @@ import Dashboard from "./pages/Dashboard";
 import Topics from "./pages/Topics";
 import ConsumerGroups from "./pages/ConsumerGroups";
 import Messages from "./pages/Messages";
+import Brokers from "./pages/Brokers";
+import Acls from "./pages/Acls";
 import "./index.css";
 
 function Layout() {
   const { user } = useAuth();
-  const [clusters, setClusters] = useState([]);
-  const [activeCluster, setActiveCluster] = useState(null);
+  const [clusters,       setClusters]       = useState([]);
+  const [activeCluster,  setActiveCluster]  = useState(null);
   const [showAddCluster, setShowAddCluster] = useState(false);
 
   useEffect(() => {
@@ -26,30 +28,50 @@ function Layout() {
     }).catch(console.error);
   }, [user]);
 
+  const handleClusterAdded = (cluster) => {
+    setClusters(prev => [...prev, cluster]);
+    setActiveCluster(cluster);
+  };
+
+  const ComingSoon = ({ title }) => (
+    <div className="flex items-center justify-center h-full text-slate-500">
+      <div className="text-center"><p className="text-4xl mb-4">🚧</p><p className="text-lg text-slate-400">{title}</p><p className="text-sm mt-2">En développement</p></div>
+    </div>
+  );
+
   return (
     <div className="h-screen flex flex-col bg-kafka-bg overflow-hidden">
       <Navbar activeCluster={activeCluster} />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar clusters={clusters} activeCluster={activeCluster} onSelectCluster={setActiveCluster} onAddCluster={() => setShowAddCluster(true)} />
+        <Sidebar clusters={clusters} activeCluster={activeCluster}
+          onSelectCluster={setActiveCluster} onAddCluster={() => setShowAddCluster(true)} />
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/"         element={<Dashboard      cluster={activeCluster} />} />
+            <Route path="/brokers"  element={<Brokers        cluster={activeCluster} />} />
             <Route path="/topics"   element={<Topics         cluster={activeCluster} />} />
             <Route path="/groups"   element={<ConsumerGroups cluster={activeCluster} />} />
             <Route path="/messages" element={<Messages       cluster={activeCluster} />} />
-            <Route path="/health"   element={<div className="flex items-center justify-center h-full text-slate-500"><p>🚧 Phase 3</p></div>} />
-            <Route path="/ai"       element={<div className="flex items-center justify-center h-full text-slate-500"><p>🚧 Phase 3</p></div>} />
+            <Route path="/acls"     element={<Acls           cluster={activeCluster} />} />
+            <Route path="/health"   element={<ComingSoon title="Health Report" />} />
+            <Route path="/ai"       element={<ComingSoon title="IA Assistant" />} />
           </Routes>
         </main>
       </div>
-      {showAddCluster && <AddClusterModal onClose={() => setShowAddCluster(false)} onAdded={(c) => { setClusters(p => [...p, c]); setActiveCluster(c); }} />}
+      {showAddCluster && (
+        <AddClusterModal onClose={() => setShowAddCluster(false)} onAdded={handleClusterAdded} />
+      )}
     </div>
   );
 }
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="h-screen bg-kafka-bg flex items-center justify-center"><div className="w-8 h-8 border-2 border-kafka-accent border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return (
+    <div className="h-screen bg-kafka-bg flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-kafka-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
   return user ? children : <Navigate to="/login" replace />;
 }
 

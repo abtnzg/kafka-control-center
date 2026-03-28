@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       "/auth":     { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
       "/clusters": { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
-      "/api":      { target: "http://localhost:8080", changeOrigin: true },
+      "/ai":       { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
     },
   },
 });
