@@ -4,22 +4,33 @@ import { authApi } from "../services/api";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("km_user");
-    return saved ? JSON.parse(saved) : null;
-  });
+  // Ne pas lire km_user depuis localStorage directement
+  // On vérifie toujours le token côté serveur d'abord
+  const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem("km_token");
-    if (token) {
-      authApi.me()
-        .then(res => { setUser(res.data); localStorage.setItem("km_user", JSON.stringify(res.data)); })
-        .catch(() => { localStorage.removeItem("km_token"); localStorage.removeItem("km_user"); })
-        .finally(() => setLoading(false));
-    } else {
+
+    if (!token) {
+      // Pas de token → pas connecté
       setLoading(false);
+      return;
     }
+
+    // Token présent → on vérifie sa validité côté serveur
+    authApi.me()
+      .then(res => {
+        setUser(res.data);
+        localStorage.setItem("km_user", JSON.stringify(res.data));
+      })
+      .catch(() => {
+        // Token invalide ou expiré → nettoyage complet
+        localStorage.removeItem("km_token");
+        localStorage.removeItem("km_user");
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
@@ -39,7 +50,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("km_token");
     localStorage.removeItem("km_user");
     setUser(null);
-    window.location.href = "/login";
   };
 
   return (

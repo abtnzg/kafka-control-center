@@ -60,3 +60,14 @@ export const aiApi = {
 };
 
 export default api;
+
+export const streamApi = {
+  list:    ()        => api.get("/streaming"),
+  create:  (data)    => api.post("/streaming", data),
+  update:  (id,data) => api.put(`/streaming/${id}`, data),
+  delete:  (id)      => api.delete(`/streaming/${id}`),
+  start:   (id)      => api.post(`/streaming/${id}/start`),
+  stop:    (id)      => api.post(`/streaming/${id}/stop`),
+  pause:   (id)      => api.post(`/streaming/${id}/pause`),
+  metrics: (id)      => api.get(`/streaming/${id}/metrics`),
+};

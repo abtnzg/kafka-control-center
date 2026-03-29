@@ -17,11 +17,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class KafkaService {
 
+    private static final int MAX_MESSAGES_LIMIT = 500;
+    private static final int CONNECT_TIMEOUT_MS = 3000;
+    private static final int API_TIMEOUT_MS     = 5000;
+
     private AdminClient buildAdminClient(KafkaCluster cluster) {
         Map<String, Object> props = new HashMap<>();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, cluster.getBootstrapServers());
-        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
-        props.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 10000);
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,          cluster.getBootstrapServers());
+        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG,         CONNECT_TIMEOUT_MS);
+        props.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG,     API_TIMEOUT_MS);
+        props.put(AdminClientConfig.RECONNECT_BACKOFF_MS_CONFIG,       500);
+        props.put(AdminClientConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG,   1000);
+        props.put(AdminClientConfig.RETRIES_CONFIG,                    1);
         if (cluster.getSaslMechanism() != null) {
             props.put("security.protocol", "SASL_SSL");
             props.put("sasl.mechanism", cluster.getSaslMechanism());
@@ -37,63 +44,61 @@ public class KafkaService {
 
     public List<TopicDto> listTopics(KafkaCluster cluster) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
-            var names = admin.listTopics(new ListTopicsOptions().listInternal(false)).names().get();
+            var names = admin.listTopics(new ListTopicsOptions().listInternal(false))
+                .names().get();
             var descriptions = admin.describeTopics(names).allTopicNames().get();
-            return descriptions.values().stream().map(td -> {
-                int partitions = td.partitions().size();
-                int replication = td.partitions().isEmpty() ? 0 : td.partitions().get(0).replicas().size();
-                return TopicDto.builder().name(td.name()).partitions(partitions).replicationFactor(replication).build();
-            }).sorted(Comparator.comparing(TopicDto::getName)).collect(Collectors.toList());
+            return descriptions.values().stream().map(td -> TopicDto.builder()
+                .name(td.name())
+                .partitions(td.partitions().size())
+                .replicationFactor(td.partitions().isEmpty() ? 0 : td.partitions().get(0).replicas().size())
+                .build()
+            ).sorted(Comparator.comparing(TopicDto::getName)).collect(Collectors.toList());
+        } catch (Exception e) {
+            throw new RuntimeException(buildErrorMessage(cluster, e), e);
         }
     }
 
     public void createTopic(KafkaCluster cluster, String name, int partitions, short replication) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             admin.createTopics(List.of(new NewTopic(name, partitions, replication))).all().get();
+        } catch (Exception e) {
+            throw new RuntimeException(buildErrorMessage(cluster, e), e);
         }
     }
 
     public void deleteTopic(KafkaCluster cluster, String name) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             admin.deleteTopics(List.of(name)).all().get();
+        } catch (Exception e) {
+            throw new RuntimeException(buildErrorMessage(cluster, e), e);
         }
     }
 
-    // ─── Topic Configurations ─────────────────────────────────────────────────
+    // ─── Topic Config ─────────────────────────────────────────────────────────
 
     public Map<String, String> getTopicConfig(KafkaCluster cluster, String topicName) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             var resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
-            var configs = admin.describeConfigs(List.of(resource)).all().get();
+            var configs  = admin.describeConfigs(List.of(resource)).all().get();
             return configs.get(resource).entries().stream()
                 .filter(e -> !e.isDefault())
-                .collect(Collectors.toMap(
-                    ConfigEntry::name,
-                    ConfigEntry::value,
-                    (a, b) -> a,
-                    TreeMap::new
-                ));
+                .collect(Collectors.toMap(ConfigEntry::name, ConfigEntry::value, (a, b) -> a, TreeMap::new));
         }
     }
 
     public Map<String, String> getAllTopicConfig(KafkaCluster cluster, String topicName) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             var resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
-            var configs = admin.describeConfigs(List.of(resource)).all().get();
+            var configs  = admin.describeConfigs(List.of(resource)).all().get();
             return configs.get(resource).entries().stream()
-                .collect(Collectors.toMap(
-                    ConfigEntry::name,
-                    ConfigEntry::value,
-                    (a, b) -> a,
-                    TreeMap::new
-                ));
+                .collect(Collectors.toMap(ConfigEntry::name, ConfigEntry::value, (a, b) -> a, TreeMap::new));
         }
     }
 
     public void updateTopicConfig(KafkaCluster cluster, String topicName, Map<String, String> configs) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             var resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
-            var entries = configs.entrySet().stream()
+            var entries  = configs.entrySet().stream()
                 .map(e -> new ConfigEntry(e.getKey(), e.getValue()))
                 .collect(Collectors.toList());
             admin.alterConfigs(Map.of(resource, new Config(entries))).all().get();
@@ -104,25 +109,29 @@ public class KafkaService {
 
     public List<ConsumerGroupDto> listConsumerGroups(KafkaCluster cluster) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
-            var groups = admin.listConsumerGroups().all().get();
+            var groups   = admin.listConsumerGroups().all().get();
             var groupIds = groups.stream().map(ConsumerGroupListing::groupId).collect(Collectors.toList());
+            if (groupIds.isEmpty()) return List.of();
             var descriptions = admin.describeConsumerGroups(groupIds).all().get();
             return descriptions.values().stream().map(desc -> ConsumerGroupDto.builder()
                 .groupId(desc.groupId()).state(desc.state().toString()).members(desc.members().size()).build()
             ).sorted(Comparator.comparing(ConsumerGroupDto::getGroupId)).collect(Collectors.toList());
+        } catch (Exception e) {
+            throw new RuntimeException(buildErrorMessage(cluster, e), e);
         }
     }
 
     public Map<String, Long> getConsumerGroupLag(KafkaCluster cluster, String groupId) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             var offsets = admin.listConsumerGroupOffsets(groupId).partitionsToOffsetAndMetadata().get();
+            if (offsets.isEmpty()) return Map.of();
             Map<TopicPartition, OffsetSpec> latestRequest = new HashMap<>();
             offsets.keySet().forEach(tp -> latestRequest.put(tp, OffsetSpec.latest()));
             var latestOffsets = admin.listOffsets(latestRequest).all().get();
-            Map<String, Long> lag = new HashMap<>();
+            Map<String, Long> lag = new LinkedHashMap<>();
             offsets.forEach((tp, om) -> {
                 long latest = latestOffsets.get(tp).offset();
-                lag.put(tp.topic() + "-" + tp.partition(), latest - om.offset());
+                lag.put(tp.topic() + "-" + tp.partition(), Math.max(0, latest - om.offset()));
             });
             return lag;
         }
@@ -133,37 +142,101 @@ public class KafkaService {
     public ClusterHealthDto getClusterHealth(KafkaCluster cluster) throws Exception {
         try (var admin = buildAdminClient(cluster)) {
             var description = admin.describeCluster();
-            var nodes = description.nodes().get();
-            var controller = description.controller().get();
-            var topics = admin.listTopics().names().get();
+            var nodes       = description.nodes().get();
+            var controller  = description.controller().get();
+            var topics      = admin.listTopics().names().get();
             return ClusterHealthDto.builder()
                 .brokersCount(nodes.size()).controllerId(controller.id())
-                .topicsCount(topics.size()).bootstrapServers(cluster.getBootstrapServers()).build();
+                .topicsCount(topics.size()).bootstrapServers(cluster.getBootstrapServers())
+                .build();
+        } catch (Exception e) {
+            throw new RuntimeException(buildErrorMessage(cluster, e), e);
         }
     }
 
-    // ─── Messages ─────────────────────────────────────────────────────────────
+    // ─── Messages — assign direct au lieu de subscribe ────────────────────────
 
     public List<MessageDto> peekMessages(KafkaCluster cluster, String topic, int maxMessages) throws Exception {
+        int limit = Math.min(maxMessages, MAX_MESSAGES_LIMIT);
+
         Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, cluster.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "kafkamind-peek-" + UUID.randomUUID());
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxMessages);
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,          cluster.getBootstrapServers());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG,                   "kafkamind-peek-" + UUID.randomUUID());
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,     "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,   "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,         false);
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,           limit);
+        props.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG,            5 * 1024 * 1024);
+        props.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG,  1024 * 1024);
+        props.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG,         CONNECT_TIMEOUT_MS);
+
         List<MessageDto> messages = new ArrayList<>();
-        try (var consumer = new KafkaConsumer<String, String>(props)) {
-            consumer.subscribe(List.of(topic));
-            var records = consumer.poll(Duration.ofSeconds(5));
-            for (var r : records) {
-                messages.add(MessageDto.builder()
-                    .partition(r.partition()).offset(r.offset())
-                    .key(r.key()).value(r.value()).timestamp(r.timestamp()).build());
-                if (messages.size() >= maxMessages) break;
+
+        try (var admin = buildAdminClient(cluster);
+             var consumer = new KafkaConsumer<String, String>(props)) {
+
+            // Récupère toutes les partitions du topic
+            var descriptions = admin.describeTopics(List.of(topic)).allTopicNames().get();
+            var topicDesc    = descriptions.get(topic);
+            if (topicDesc == null) throw new RuntimeException("Topic introuvable : " + topic);
+
+            // Assigne manuellement toutes les partitions — pas de subscribe()
+            var partitions = topicDesc.partitions().stream()
+                .map(p -> new TopicPartition(topic, p.partition()))
+                .collect(Collectors.toList());
+
+            consumer.assign(partitions);
+
+            // Récupère les offsets earliest et latest pour chaque partition
+            var beginOffsets = consumer.beginningOffsets(partitions);
+            var endOffsets   = consumer.endOffsets(partitions);
+
+            // Calcule le nombre total de messages disponibles
+            long totalMessages = endOffsets.entrySet().stream()
+                .mapToLong(e -> e.getValue() - beginOffsets.getOrDefault(e.getKey(), 0L))
+                .sum();
+
+            if (totalMessages == 0) return List.of(); // topic vide → retour immédiat
+
+            // Positionne sur earliest de chaque partition
+            partitions.forEach(tp -> consumer.seek(tp, beginOffsets.getOrDefault(tp, 0L)));
+
+            // Poll jusqu'à avoir le nombre de messages voulus ou épuiser le topic
+            long deadline = System.currentTimeMillis() + 8000;
+            while (messages.size() < limit && System.currentTimeMillis() < deadline) {
+                var records = consumer.poll(Duration.ofMillis(500));
+                if (records.isEmpty()) break;
+                for (var r : records) {
+                    messages.add(MessageDto.builder()
+                        .partition(r.partition())
+                        .offset(r.offset())
+                        .key(r.key())
+                        .value(r.value())
+                        .timestamp(r.timestamp())
+                        .build());
+                    if (messages.size() >= limit) break;
+                }
             }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur lecture messages : " + e.getMessage(), e);
         }
+
         return messages;
+    }
+
+    // ─── Helper erreurs ───────────────────────────────────────────────────────
+
+    private String buildErrorMessage(KafkaCluster cluster, Exception e) {
+        String cause = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+        if (cause != null && (cause.contains("Connection refused") || cause.contains("ECONNREFUSED"))) {
+            return String.format("Impossible de joindre '%s' sur %s — vérifiez que Kafka est démarré.",
+                cluster.getName(), cluster.getBootstrapServers());
+        }
+        if (cause != null && cause.contains("TimeoutException")) {
+            return String.format("Timeout sur '%s' (%s) — réseau ou broker injoignable.",
+                cluster.getName(), cluster.getBootstrapServers());
+        }
+        return "Erreur Kafka : " + (cause != null ? cause : e.getMessage());
     }
 }

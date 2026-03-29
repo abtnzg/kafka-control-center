@@ -7,9 +7,10 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      "/auth":     { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
-      "/clusters": { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
-      "/ai":       { target: "http://localhost:8080", changeOrigin: true, rewrite: (path) => "/api" + path },
+      "/auth":      { target: "http://localhost:8080", changeOrigin: true, rewrite: p => "/api" + p },
+      "/clusters":  { target: "http://localhost:8080", changeOrigin: true, rewrite: p => "/api" + p },
+      "/ai":        { target: "http://localhost:8080", changeOrigin: true, rewrite: p => "/api" + p },
+      "/streaming": { target: "http://localhost:8080", changeOrigin: true, rewrite: p => "/api" + p },
     },
   },
 });

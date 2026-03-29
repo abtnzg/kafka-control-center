@@ -1,16 +1,17 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, List, Users, Activity, MessageSquare, Brain, Plus, ChevronDown, Server, Shield } from "lucide-react";
+import { LayoutDashboard, List, Users, Activity, MessageSquare, Brain, Plus, ChevronDown, Server, Shield, Zap } from "lucide-react";
 import { useState } from "react";
 
 const NAV = [
-  { to: "/",        icon: LayoutDashboard, label: "Dashboard"        },
-  { to: "/brokers", icon: Server,          label: "Brokers"          },
-  { to: "/topics",  icon: List,            label: "Topics"           },
-  { to: "/groups",  icon: Users,           label: "Consumer Groups"  },
-  { to: "/messages",icon: MessageSquare,   label: "Messages"         },
-  { to: "/acls",    icon: Shield,          label: "ACLs"             },
-  { to: "/health",  icon: Activity,        label: "Health"           },
-  { to: "/ai",      icon: Brain,           label: "IA Assistant", badge: "AI" },
+  { to: "/",          icon: LayoutDashboard, label: "Dashboard"        },
+  { to: "/brokers",   icon: Server,          label: "Brokers"          },
+  { to: "/topics",    icon: List,            label: "Topics"           },
+  { to: "/groups",    icon: Users,           label: "Consumer Groups"  },
+  { to: "/messages",  icon: MessageSquare,   label: "Messages"         },
+  { to: "/acls",      icon: Shield,          label: "ACLs"             },
+  { to: "/streaming", icon: Zap,             label: "Streaming",  badge: "NEW" },
+  { to: "/health",    icon: Activity,        label: "Health"           },
+  { to: "/ai",        icon: Brain,           label: "IA Assistant", badge: "AI" },
 ];
 
 export default function Sidebar({ clusters, activeCluster, onSelectCluster, onAddCluster }) {
@@ -33,7 +34,7 @@ export default function Sidebar({ clusters, activeCluster, onSelectCluster, onAd
                     ? "bg-kafka-accent/10 text-kafka-accent border border-kafka-accent/30"
                     : "text-slate-400 hover:bg-kafka-bg hover:text-white"
                 }`}>
-                <div className={`w-1.5 h-1.5 rounded-full ${activeCluster?.id === c.id ? "bg-kafka-success" : "bg-slate-600"}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${activeCluster?.id === c.id ? "bg-green-400" : "bg-slate-600"}`} />
                 <span className="truncate">{c.name}</span>
               </button>
             ))}
@@ -45,7 +46,7 @@ export default function Sidebar({ clusters, activeCluster, onSelectCluster, onAd
         )}
       </div>
 
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {NAV.map(({ to, icon: Icon, label, badge }) => (
           <NavLink key={to} to={to} end={to === "/"}
             className={({ isActive }) =>
@@ -57,7 +58,11 @@ export default function Sidebar({ clusters, activeCluster, onSelectCluster, onAd
             }>
             <Icon size={16} />
             <span className="flex-1">{label}</span>
-            {badge && <span className="text-xs px-1.5 py-0.5 bg-kafka-accent rounded text-white font-medium">{badge}</span>}
+            {badge && (
+              <span className={`text-xs px-1.5 py-0.5 rounded text-white font-medium ${badge === "NEW" ? "bg-green-600" : "bg-kafka-accent"}`}>
+                {badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

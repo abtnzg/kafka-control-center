@@ -12,6 +12,7 @@ import ConsumerGroups from "./pages/ConsumerGroups";
 import Messages from "./pages/Messages";
 import Brokers from "./pages/Brokers";
 import Acls from "./pages/Acls";
+import Streaming from "./pages/Streaming";
 import "./index.css";
 
 function Layout() {
@@ -28,14 +29,13 @@ function Layout() {
     }).catch(console.error);
   }, [user]);
 
-  const handleClusterAdded = (cluster) => {
-    setClusters(prev => [...prev, cluster]);
-    setActiveCluster(cluster);
-  };
-
   const ComingSoon = ({ title }) => (
     <div className="flex items-center justify-center h-full text-slate-500">
-      <div className="text-center"><p className="text-4xl mb-4">🚧</p><p className="text-lg text-slate-400">{title}</p><p className="text-sm mt-2">En développement</p></div>
+      <div className="text-center">
+        <p className="text-4xl mb-4">🚧</p>
+        <p className="text-lg text-slate-400">{title}</p>
+        <p className="text-sm mt-2">En développement</p>
+      </div>
     </div>
   );
 
@@ -43,23 +43,31 @@ function Layout() {
     <div className="h-screen flex flex-col bg-kafka-bg overflow-hidden">
       <Navbar activeCluster={activeCluster} />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar clusters={clusters} activeCluster={activeCluster}
-          onSelectCluster={setActiveCluster} onAddCluster={() => setShowAddCluster(true)} />
+        <Sidebar
+          clusters={clusters}
+          activeCluster={activeCluster}
+          onSelectCluster={setActiveCluster}
+          onAddCluster={() => setShowAddCluster(true)}
+        />
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/"         element={<Dashboard      cluster={activeCluster} />} />
-            <Route path="/brokers"  element={<Brokers        cluster={activeCluster} />} />
-            <Route path="/topics"   element={<Topics         cluster={activeCluster} />} />
-            <Route path="/groups"   element={<ConsumerGroups cluster={activeCluster} />} />
-            <Route path="/messages" element={<Messages       cluster={activeCluster} />} />
-            <Route path="/acls"     element={<Acls           cluster={activeCluster} />} />
-            <Route path="/health"   element={<ComingSoon title="Health Report" />} />
-            <Route path="/ai"       element={<ComingSoon title="IA Assistant" />} />
+            <Route path="/"          element={<Dashboard      cluster={activeCluster} />} />
+            <Route path="/brokers"   element={<Brokers        cluster={activeCluster} />} />
+            <Route path="/topics"    element={<Topics         cluster={activeCluster} />} />
+            <Route path="/groups"    element={<ConsumerGroups cluster={activeCluster} />} />
+            <Route path="/messages"  element={<Messages       cluster={activeCluster} />} />
+            <Route path="/acls"      element={<Acls           cluster={activeCluster} />} />
+            <Route path="/streaming" element={<Streaming />} />
+            <Route path="/health"    element={<ComingSoon title="Health Report" />} />
+            <Route path="/ai"        element={<ComingSoon title="IA Assistant" />} />
           </Routes>
         </main>
       </div>
       {showAddCluster && (
-        <AddClusterModal onClose={() => setShowAddCluster(false)} onAdded={handleClusterAdded} />
+        <AddClusterModal
+          onClose={() => setShowAddCluster(false)}
+          onAdded={(c) => { setClusters(p => [...p, c]); setActiveCluster(c); }}
+        />
       )}
     </div>
   );
@@ -72,13 +80,14 @@ function PrivateRoute({ children }) {
       <div className="w-8 h-8 border-2 border-kafka-accent border-t-transparent rounded-full animate-spin" />
     </div>
   );
-  return user ? children : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={<PrivateRoute><Layout /></PrivateRoute>} />
