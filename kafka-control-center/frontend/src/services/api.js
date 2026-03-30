@@ -11,10 +11,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
       localStorage.removeItem("km_token");
       localStorage.removeItem("km_user");
-      window.location.href = "/login";
+      if (window.location.pathname !== "/login") window.location.href = "/login";
     }
     return Promise.reject(err);
   }
@@ -47,9 +47,31 @@ export const topicApi = {
   updateConfig: (cid, topic, data)  => api.put(`/clusters/${cid}/topics/${topic}/config`, data),
 };
 
+export const messageApi = {
+  replay:         (cid, topic, startFrom, limit)    => api.post(`/clusters/${cid}/topics/${topic}/replay`, { startFrom, limit }),
+  produce:        (cid, topic, key, value, headers) => api.post(`/clusters/${cid}/topics/${topic}/produce`, { key, value, headers }),
+  listDlq:        (cid)                             => api.get(`/clusters/${cid}/dlq`),
+  getDlqMessages: (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/dlq?limit=${limit}`),
+  search:         (cid, topic, q, limit)            => api.get(`/clusters/${cid}/topics/${topic}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  exportCsv:      (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/export?format=csv&limit=${limit}`, { responseType: "text" }),
+  exportJson:     (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/export?format=json&limit=${limit}`),
+  validate:       (cid, topic, schema, limit)       => api.post(`/clusters/${cid}/topics/${topic}/validate`, { schema, limit }),
+};
+
 export const groupApi = {
   list: (cid)          => api.get(`/clusters/${cid}/consumer-groups`),
   lag:  (cid, groupId) => api.get(`/clusters/${cid}/consumer-groups/${groupId}/lag`),
+};
+
+export const streamApi = {
+  list:    ()         => api.get("/streaming"),
+  create:  (data)     => api.post("/streaming", data),
+  update:  (id, data) => api.put(`/streaming/${id}`, data),
+  delete:  (id)       => api.delete(`/streaming/${id}`),
+  start:   (id)       => api.post(`/streaming/${id}/start`),
+  stop:    (id)       => api.post(`/streaming/${id}/stop`),
+  pause:   (id)       => api.post(`/streaming/${id}/pause`),
+  metrics: (id)       => api.get(`/streaming/${id}/metrics`),
 };
 
 export const aiApi = {
@@ -60,14 +82,3 @@ export const aiApi = {
 };
 
 export default api;
-
-export const streamApi = {
-  list:    ()        => api.get("/streaming"),
-  create:  (data)    => api.post("/streaming", data),
-  update:  (id,data) => api.put(`/streaming/${id}`, data),
-  delete:  (id)      => api.delete(`/streaming/${id}`),
-  start:   (id)      => api.post(`/streaming/${id}/start`),
-  stop:    (id)      => api.post(`/streaming/${id}/stop`),
-  pause:   (id)      => api.post(`/streaming/${id}/pause`),
-  metrics: (id)      => api.get(`/streaming/${id}/metrics`),
-};

@@ -16,6 +16,7 @@
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/controller/BrokerAclController.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/security/JwtFilter.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/config/GlobalExceptionHandler.java
+/home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/controller/MessageActionController.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/model/RequestLog.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/model/User.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/streaming/StreamingEngine.java
@@ -25,6 +26,7 @@
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/dto/kafka/ConsumerGroupDto.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/model/StreamPipeline.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/dto/kafka/TopicDto.java
+/home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/service/MessageActionService.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/repository/KafkaClusterRepository.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/streaming/PipelineMetrics.java
 /home/ubuntu/kafka-control-center/kafka-control-center/backend/src/main/java/com/kafkamind/service/AuthService.java

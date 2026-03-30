@@ -170,4 +170,19 @@ docker exec kafka-control-center-kafka-1 \
   --topic stream-source < /tmp/messages-test.json"
 
 echo "Messages envoyés !"
-
+_________________________________________________________________________________________
+ubuntu@ali:~/kafka-control-center/kafka-control-center$ python3 -c "
+import json, random
+events = ['order.placed','user.created','payment.success','order.shipped','user.login','payment.failed']
+users  = ['alice','bob','charlie','diana','eve']
+for i in range(1, 100001):
+    print(json.dumps({'id':str(i),'event':random.choice(events),'userId':random.choice(users),'amount':round(random.uniform(10,500),2)}))
+" > ~/messages-1000.json
+ubuntu@ali:~/kafka-control-center/kafka-control-center$ docker cp ~/messages-1000.json kafka-control-center-kafka-1:/tmp/messages-1000.json
+Successfully copied 7.79MB to kafka-control-center-kafka-1:/tmp/messages-1000.json
+ubuntu@ali:~/kafka-control-center/kafka-control-center$ docker exec kafka-control-center-kafka-1 \
+  bash -c "kafka-console-producer \
+  --bootstrap-server localhost:9092 \
+  --topic stream-source < /tmp/messages-1000.json"
+ubuntu@ali:~/kafka-control-center/kafka-control-center$
+_____________________________________________________________________________________________________

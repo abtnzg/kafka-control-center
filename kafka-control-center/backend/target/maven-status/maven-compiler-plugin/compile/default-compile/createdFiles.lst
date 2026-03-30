@@ -1,3 +1,4 @@
+com/kafkamind/controller/MessageActionController$ReplayRequest.class
 com/kafkamind/model/StreamPipeline$StreamPipelineBuilder.class
 com/kafkamind/controller/AuthController$AuthRequest.class
 com/kafkamind/controller/BrokerAclController.class
@@ -19,6 +20,9 @@ com/kafkamind/dto/kafka/MessageDto.class
 com/kafkamind/controller/AiController.class
 com/kafkamind/model/StreamPipeline$PipelineMode.class
 com/kafkamind/controller/StreamingController$PipelineResponse.class
+com/kafkamind/service/MessageActionService.class
+com/kafkamind/controller/MessageActionController$ProduceRequest.class
+com/kafkamind/controller/MessageActionController.class
 com/kafkamind/controller/StreamingController.class
 com/kafkamind/model/User$Plan.class
 com/kafkamind/dto/kafka/ClusterHealthDto$ClusterHealthDtoBuilder.class
@@ -32,6 +36,7 @@ com/kafkamind/repository/StreamPipelineRepository.class
 com/kafkamind/model/KafkaCluster$KafkaClusterBuilder.class
 com/kafkamind/service/KafkaService.class
 com/kafkamind/model/RequestLog$RequestLogBuilder.class
+com/kafkamind/service/MessageActionService$ValidationResult.class
 com/kafkamind/model/User$UserBuilder.class
 com/kafkamind/controller/KafkaController.class
 com/kafkamind/security/JwtUtil.class
@@ -51,3 +56,4 @@ com/kafkamind/dto/kafka/AclDto.class
 com/kafkamind/dto/kafka/BrokerDto.class
 com/kafkamind/security/JwtFilter.class
 com/kafkamind/dto/kafka/MessageDto$MessageDtoBuilder.class
+com/kafkamind/controller/MessageActionController$ValidateRequest.class
