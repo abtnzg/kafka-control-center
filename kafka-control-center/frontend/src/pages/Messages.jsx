@@ -1,31 +1,102 @@
 import { useState, useEffect } from "react";
 import { topicApi, messageApi } from "../services/api";
-import { Search, Play, ChevronDown, RotateCcw, Send, AlertTriangle, Download, CheckCircle, XCircle, Filter } from "lucide-react";
+import { Search, Play, ChevronDown, ChevronLeft, ChevronRight, RotateCcw, Send, AlertTriangle, Download, CheckCircle, XCircle, Filter } from "lucide-react";
 
 const TABS = [
-  { id: "browse",   label: "Parcourir",   icon: Play },
-  { id: "replay",   label: "Replay",      icon: RotateCcw },
-  { id: "produce",  label: "Produire",    icon: Send },
-  { id: "dlq",      label: "DLQ",         icon: AlertTriangle },
-  { id: "search",   label: "Recherche",   icon: Search },
-  { id: "export",   label: "Export",      icon: Download },
-  { id: "validate", label: "Validation",  icon: CheckCircle },
+  { id: "browse",   label: "Parcourir",  icon: Play },
+  { id: "replay",   label: "Replay",     icon: RotateCcw },
+  { id: "produce",  label: "Produire",   icon: Send },
+  { id: "dlq",      label: "DLQ",        icon: AlertTriangle },
+  { id: "search",   label: "Recherche",  icon: Search },
+  { id: "export",   label: "Export",     icon: Download },
+  { id: "validate", label: "Validation", icon: CheckCircle },
 ];
+
+function Pagination({ page, totalPages, onPage }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 py-3">
+      <button onClick={() => onPage(0)} disabled={page === 0}
+        className="p-1.5 rounded hover:bg-kafka-surface text-slate-400 hover:text-white disabled:opacity-30 transition text-xs">«</button>
+      <button onClick={() => onPage(page - 1)} disabled={page === 0}
+        className="p-1.5 rounded hover:bg-kafka-surface text-slate-400 hover:text-white disabled:opacity-30 transition">
+        <ChevronLeft size={14} />
+      </button>
+      {[...Array(Math.min(totalPages, 7))].map((_, i) => {
+        let p = i;
+        if (totalPages > 7) {
+          if (page < 4) p = i;
+          else if (page > totalPages - 5) p = totalPages - 7 + i;
+          else p = page - 3 + i;
+        }
+        return (
+          <button key={p} onClick={() => onPage(p)}
+            className={`w-8 h-8 rounded text-xs transition ${
+              p === page ? "bg-kafka-accent text-white" : "text-slate-400 hover:bg-kafka-surface hover:text-white"
+            }`}>
+            {p + 1}
+          </button>
+        );
+      })}
+      <button onClick={() => onPage(page + 1)} disabled={page >= totalPages - 1}
+        className="p-1.5 rounded hover:bg-kafka-surface text-slate-400 hover:text-white disabled:opacity-30 transition">
+        <ChevronRight size={14} />
+      </button>
+      <button onClick={() => onPage(totalPages - 1)} disabled={page >= totalPages - 1}
+        className="p-1.5 rounded hover:bg-kafka-surface text-slate-400 hover:text-white disabled:opacity-30 transition text-xs">»</button>
+      <span className="text-slate-600 text-xs ml-2">Page {page + 1} / {totalPages}</span>
+    </div>
+  );
+}
+
+function MessageList({ messages }) {
+  const [expanded, setExpanded] = useState(null);
+  const tryJson = (val) => { try { return JSON.stringify(JSON.parse(val), null, 2); } catch { return val; } };
+  if (messages.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {messages.map((msg, i) => (
+        <div key={i} className="bg-kafka-surface border border-kafka-border rounded-xl overflow-hidden">
+          <button onClick={() => setExpanded(expanded === i ? null : i)}
+            className="w-full px-5 py-3 flex items-center gap-3 hover:bg-kafka-bg/50 transition text-left">
+            <span className="text-xs px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded font-mono shrink-0">P{msg.partition}</span>
+            <span className="text-xs text-slate-500 font-mono shrink-0">+{msg.offset}</span>
+            {msg.key && <span className="text-xs text-slate-400 font-mono shrink-0"><span className="text-slate-600">key:</span> {msg.key}</span>}
+            <span className="text-xs text-slate-600 font-mono truncate flex-1">{msg.value?.substring(0, 80)}{msg.value?.length > 80 ? "…" : ""}</span>
+            <span className="text-xs text-slate-700 shrink-0">{new Date(msg.timestamp).toLocaleTimeString("fr-FR")}</span>
+            <ChevronDown size={13} className={`text-slate-500 shrink-0 transition-transform ${expanded === i ? "rotate-180" : ""}`} />
+          </button>
+          {expanded === i && (
+            <div className="px-5 pb-4 border-t border-kafka-border">
+              <pre className="mt-3 text-xs text-green-400 bg-kafka-bg rounded-lg p-4 overflow-x-auto font-mono leading-relaxed">{tryJson(msg.value) || "(vide)"}</pre>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function Messages({ cluster }) {
   const [tab,      setTab]      = useState("browse");
   const [topics,   setTopics]   = useState([]);
   const [topic,    setTopic]    = useState("");
   const [messages, setMessages] = useState([]);
-  const [limit,    setLimit]    = useState(20);
   const [loading,  setLoading]  = useState(false);
-  const [expanded, setExpanded] = useState(null);
   const [error,    setError]    = useState("");
   const [success,  setSuccess]  = useState("");
+
+  // Pagination browse
+  const [page,       setPage]       = useState(0);
+  const [pageSize,   setPageSize]   = useState(20);
+  const [totalPages, setTotalPages] = useState(0);
+  const [total,      setTotal]      = useState(0);
 
   // Replay
   const [replayFrom,  setReplayFrom]  = useState("earliest");
   const [replayLimit, setReplayLimit] = useState(100);
+  const [customOffset, setCustomOffset] = useState("");
+  const [customTs,     setCustomTs]     = useState("");
 
   // Produce
   const [prodKey,     setProdKey]     = useState("");
@@ -33,89 +104,103 @@ export default function Messages({ cluster }) {
   const [prodHeaders, setProdHeaders] = useState("");
 
   // Search
-  const [searchQuery,  setSearchQuery]  = useState("");
-  const [searchLimit,  setSearchLimit]  = useState(100);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [useRegex,    setUseRegex]    = useState(false);
+  const [searchPage,  setSearchPage]  = useState(0);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchPages, setSearchPages] = useState(0);
 
   // Validate
-  const [schema,          setSchema]          = useState('{"required":["id","event"]}');
-  const [validateLimit,   setValidateLimit]   = useState(50);
-  const [validationResult,setValidationResult]= useState(null);
+  const [schema,           setSchema]           = useState('{"required":["id","event"]}');
+  const [validateLimit,    setValidateLimit]     = useState(50);
+  const [validationResult, setValidationResult]  = useState(null);
 
   // DLQ
   const [dlqTopics, setDlqTopics] = useState([]);
+  const [exportLimit, setExportLimit] = useState(500);
 
   useEffect(() => {
     if (!cluster) return;
     topicApi.list(cluster.id).then(r => setTopics(r.data)).catch(console.error);
   }, [cluster]);
 
+  const reset = () => { setMessages([]); setError(""); setSuccess(""); setValidationResult(null); setPage(0); setSearchPage(0); };
+
+  const loadPage = async (p) => {
+    if (!topic) return;
+    setLoading(true); setError("");
+    try {
+      const r = await messageApi.pagedMessages(cluster.id, topic, p, pageSize);
+      setMessages(r.data.messages);
+      setPage(r.data.page);
+      setTotalPages(r.data.totalPages);
+      setTotal(r.data.total);
+    } catch (e) { setError(e.response?.data?.error || "Erreur"); }
+    finally { setLoading(false); }
+  };
+
+  const loadSearchPage = async (p) => {
+    if (!topic || !searchQuery) return;
+    setLoading(true); setError("");
+    try {
+      const r = await messageApi.search(cluster.id, topic, searchQuery, useRegex, p, 20);
+      setMessages(r.data.messages);
+      setSearchPage(r.data.page);
+      setSearchPages(r.data.totalPages);
+      setSearchTotal(r.data.total);
+      if (p === 0) setSuccess(`${r.data.total} résultat(s) pour "${searchQuery}"${useRegex ? " (regex)" : ""}`);
+    } catch (e) { setError(e.response?.data?.error || "Erreur regex : expression invalide"); }
+    finally { setLoading(false); }
+  };
+
   const run = async (action) => {
     if (!cluster) { setError("Sélectionne un cluster"); return; }
     setError(""); setSuccess(""); setLoading(true); setMessages([]); setValidationResult(null);
     try {
       switch (action) {
-        case "browse": {
-          if (!topic) { setError("Sélectionne un topic"); break; }
-          const r = await topicApi.messages(cluster.id, topic, limit);
-          setMessages(r.data);
-          break;
-        }
+        case "browse": await loadPage(0); break;
         case "replay": {
           if (!topic) { setError("Sélectionne un topic"); break; }
-          const r = await messageApi.replay(cluster.id, topic, replayFrom, replayLimit);
+          let from = replayFrom;
+          if (replayFrom === "custom-offset") from = customOffset;
+          if (replayFrom === "custom-ts")     from = "ts:" + customTs;
+          const r = await messageApi.replay(cluster.id, topic, from, replayLimit);
           setMessages(r.data.messages);
-          setSuccess(`${r.data.count} messages rejoués depuis ${replayFrom}`);
+          setSuccess(`${r.data.count} messages rejoués depuis ${from}`);
           break;
         }
         case "produce": {
-          if (!topic)      { setError("Sélectionne un topic"); break; }
-          if (!prodValue)  { setError("La valeur est obligatoire"); break; }
+          if (!topic)     { setError("Sélectionne un topic"); break; }
+          if (!prodValue) { setError("La valeur est obligatoire"); break; }
           const headers = {};
-          if (prodHeaders.trim()) {
-            prodHeaders.split("\n").forEach(line => {
-              const [k, v] = line.split(":");
-              if (k && v) headers[k.trim()] = v.trim();
-            });
-          }
-          await messageApi.produce(cluster.id, topic, prodKey || null, prodValue, headers);
+          prodHeaders.split("\n").forEach(line => { const [k,v]=line.split(":"); if(k&&v) headers[k.trim()]=v.trim(); });
+          await messageApi.produce(cluster.id, topic, prodKey||null, prodValue, headers);
           setSuccess("Message produit avec succès !");
           break;
         }
         case "dlq": {
           const r = await messageApi.listDlq(cluster.id);
           setDlqTopics(r.data.dlqTopics);
-          if (topic) {
-            const msgs = await messageApi.getDlqMessages(cluster.id, topic, 50);
-            setMessages(msgs.data.messages);
-          }
+          if (topic) { const msgs = await messageApi.getDlqMessages(cluster.id, topic, 50); setMessages(msgs.data.messages); }
           break;
         }
-        case "search": {
-          if (!topic)       { setError("Sélectionne un topic"); break; }
-          if (!searchQuery) { setError("Saisis une requête de recherche"); break; }
-          const r = await messageApi.search(cluster.id, topic, searchQuery, searchLimit);
-          setMessages(r.data.results);
-          setSuccess(`${r.data.count} résultat(s) pour "${searchQuery}"`);
-          break;
-        }
+        case "search": await loadSearchPage(0); break;
         case "export-csv": {
           if (!topic) { setError("Sélectionne un topic"); break; }
-          const r = await messageApi.exportCsv(cluster.id, topic, limit);
+          const r = await messageApi.exportCsv(cluster.id, topic, exportLimit);
           const blob = new Blob([r.data], { type: "text/csv" });
           const url  = URL.createObjectURL(blob);
-          const a    = document.createElement("a");
-          a.href = url; a.download = `${topic}.csv`; a.click();
+          const a = document.createElement("a"); a.href=url; a.download=`${topic}.csv`; a.click();
           URL.revokeObjectURL(url);
           setSuccess("Export CSV téléchargé !");
           break;
         }
         case "export-json": {
           if (!topic) { setError("Sélectionne un topic"); break; }
-          const r = await messageApi.exportJson(cluster.id, topic, limit);
+          const r = await messageApi.exportJson(cluster.id, topic, exportLimit);
           const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: "application/json" });
           const url  = URL.createObjectURL(blob);
-          const a    = document.createElement("a");
-          a.href = url; a.download = `${topic}.json`; a.click();
+          const a = document.createElement("a"); a.href=url; a.download=`${topic}.json`; a.click();
           URL.revokeObjectURL(url);
           setSuccess("Export JSON téléchargé !");
           break;
@@ -127,22 +212,12 @@ export default function Messages({ cluster }) {
           break;
         }
       }
-    } catch (e) {
-      setError(e.response?.data?.error || e.message || "Erreur");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const tryJson = (val) => {
-    try { return JSON.stringify(JSON.parse(val), null, 2); }
-    catch { return val; }
+    } catch (e) { setError(e.response?.data?.error || e.message || "Erreur"); }
+    finally { setLoading(false); }
   };
 
   if (!cluster) return (
-    <div className="flex items-center justify-center h-full text-slate-500">
-      <p>Sélectionne un cluster d'abord</p>
-    </div>
+    <div className="flex items-center justify-center h-full text-slate-500"><p>Sélectionne un cluster</p></div>
   );
 
   return (
@@ -155,44 +230,39 @@ export default function Messages({ cluster }) {
       {/* Tabs */}
       <div className="flex gap-1.5 flex-wrap">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => { setTab(id); setMessages([]); setError(""); setSuccess(""); setValidationResult(null); }}
+          <button key={id} onClick={() => { setTab(id); reset(); }}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
-              tab === id
-                ? "bg-kafka-accent text-white"
-                : "bg-kafka-surface border border-kafka-border text-slate-400 hover:text-white"
+              tab === id ? "bg-kafka-accent text-white" : "bg-kafka-surface border border-kafka-border text-slate-400 hover:text-white"
             }`}>
             <Icon size={13} />{label}
           </button>
         ))}
       </div>
 
-      {/* Topic selector commun */}
+      {/* Panel */}
       <div className="bg-kafka-surface border border-kafka-border rounded-xl p-4 space-y-3">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <select value={topic} onChange={e => setTopic(e.target.value)}
-              className="w-full bg-kafka-bg border border-kafka-border rounded-lg pl-8 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition appearance-none">
-              <option value="">Sélectionner un topic</option>
-              {topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-            </select>
-          </div>
-
-          {/* Contrôles selon le tab */}
-          {(tab === "browse" || tab === "export") && (
-            <select value={limit} onChange={e => setLimit(Number(e.target.value))}
-              className="bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition">
-              {[20, 50, 100, 200, 500].map(n => <option key={n} value={n}>{n} msgs</option>)}
-            </select>
-          )}
+        {/* Topic selector */}
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <select value={topic} onChange={e => { setTopic(e.target.value); reset(); }}
+            className="w-full bg-kafka-bg border border-kafka-border rounded-lg pl-8 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition appearance-none">
+            <option value="">Sélectionner un topic</option>
+            {topics.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+          </select>
         </div>
 
         {/* ── BROWSE ── */}
         {tab === "browse" && (
-          <button onClick={() => run("browse")} disabled={!topic || loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 bg-kafka-accent hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
-            <Play size={14} />{loading ? "Chargement..." : "Lire les messages"}
-          </button>
+          <div className="flex gap-3">
+            <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
+              className="bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition">
+              {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n} par page</option>)}
+            </select>
+            <button onClick={() => run("browse")} disabled={!topic||loading}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-kafka-accent hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+              <Play size={14} />{loading ? "Chargement..." : "Lire"}
+            </button>
+          </div>
         )}
 
         {/* ── REPLAY ── */}
@@ -206,33 +276,24 @@ export default function Messages({ cluster }) {
                   <option value="earliest">Début (earliest)</option>
                   <option value="latest">Fin (latest)</option>
                   <option value="custom-offset">Offset précis</option>
-                  <option value="custom-ts">Timestamp</option>
+                  <option value="custom-ts">Timestamp Unix</option>
                 </select>
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Nombre de messages</label>
-                <input type="number" value={replayLimit} onChange={e => setReplayLimit(Number(e.target.value))}
-                  min="1" max="500"
+                <input type="number" value={replayLimit} onChange={e => setReplayLimit(Number(e.target.value))} min="1" max="500"
                   className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
               </div>
             </div>
             {replayFrom === "custom-offset" && (
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Offset (ex: 1000)</label>
-                <input type="number" placeholder="1000"
-                  onChange={e => setReplayFrom(e.target.value)}
-                  className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
-              </div>
+              <input type="number" value={customOffset} onChange={e => setCustomOffset(e.target.value)} placeholder="ex: 1000"
+                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
             )}
             {replayFrom === "custom-ts" && (
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Timestamp (Unix ms)</label>
-                <input type="number" placeholder="1711706400000"
-                  onChange={e => setReplayFrom("ts:" + e.target.value)}
-                  className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
-              </div>
+              <input type="number" value={customTs} onChange={e => setCustomTs(e.target.value)} placeholder="ex: 1711706400000"
+                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
             )}
-            <button onClick={() => run("replay")} disabled={!topic || loading}
+            <button onClick={() => run("replay")} disabled={!topic||loading}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-kafka-accent hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
               <RotateCcw size={14} />{loading ? "Chargement..." : "Rejouer"}
             </button>
@@ -242,25 +303,13 @@ export default function Messages({ cluster }) {
         {/* ── PRODUIRE ── */}
         {tab === "produce" && (
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Clé (optionnel)</label>
-              <input value={prodKey} onChange={e => setProdKey(e.target.value)}
-                placeholder="user-123"
-                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Valeur <span className="text-red-400">*</span></label>
-              <textarea value={prodValue} onChange={e => setProdValue(e.target.value)}
-                rows={5} placeholder='{"event":"order.placed","userId":"alice"}'
-                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Headers (un par ligne, format key:value)</label>
-              <textarea value={prodHeaders} onChange={e => setProdHeaders(e.target.value)}
-                rows={2} placeholder={"correlation-id:abc123\ncontent-type:application/json"}
-                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
-            </div>
-            <button onClick={() => run("produce")} disabled={!topic || loading}
+            <input value={prodKey} onChange={e => setProdKey(e.target.value)} placeholder="Clé (optionnel)"
+              className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition" />
+            <textarea value={prodValue} onChange={e => setProdValue(e.target.value)} rows={5} placeholder='{"event":"order.placed"}'
+              className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
+            <textarea value={prodHeaders} onChange={e => setProdHeaders(e.target.value)} rows={2} placeholder={"correlation-id:abc123\ncontent-type:application/json"}
+              className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
+            <button onClick={() => run("produce")} disabled={!topic||loading}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
               <Send size={14} />{loading ? "Envoi..." : "Envoyer le message"}
             </button>
@@ -272,39 +321,50 @@ export default function Messages({ cluster }) {
           <div className="space-y-3">
             <button onClick={() => run("dlq")} disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
-              <AlertTriangle size={14} />{loading ? "Chargement..." : "Scanner les DLQ"}
+              <AlertTriangle size={14} />{loading ? "Scan..." : "Scanner les DLQ"}
             </button>
             {dlqTopics.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {dlqTopics.map(t => (
                   <button key={t} onClick={() => setTopic(t)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-mono transition ${
-                      topic === t
-                        ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                        : "bg-kafka-bg border border-kafka-border text-slate-400 hover:text-red-400"
-                    }`}>
-                    {t}
-                  </button>
+                      topic === t ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-kafka-bg border border-kafka-border text-slate-400 hover:text-red-400"
+                    }`}>{t}</button>
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {/* ── RECHERCHE ── */}
+        {/* ── RECHERCHE avec REGEX ── */}
         {tab === "search" && (
           <div className="space-y-3">
             <div className="flex gap-3">
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder='Rechercher dans les messages... ex: "alice" ou "error"'
                 onKeyDown={e => e.key === "Enter" && run("search")}
-                className="flex-1 bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
-              <select value={searchLimit} onChange={e => setSearchLimit(Number(e.target.value))}
-                className="bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-kafka-accent transition">
-                {[50, 100, 200].map(n => <option key={n} value={n}>max {n}</option>)}
-              </select>
+                placeholder={useRegex ? 'ex: \\d{4}-\\d{2}-\\d{2} ou "error|fail"' : 'Rechercher dans les messages...'}
+                className="flex-1 bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition" />
+              <button onClick={() => setUseRegex(!useRegex)}
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-medium transition border ${
+                  useRegex ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-kafka-bg border-kafka-border text-slate-400 hover:text-white"
+                }`}>
+                <Filter size={12} /> Regex
+              </button>
             </div>
-            <button onClick={() => run("search")} disabled={!topic || !searchQuery || loading}
+            {useRegex && (
+              <div className="px-3 py-2 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                <p className="text-amber-400 text-xs font-medium mb-1">Expressions régulières supportées :</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-slate-500 font-mono">
+                  <span>{"error|fail"} — OR</span>
+                  <span>{"^\\{"} — commence par {"{"}</span>
+                  <span>{"\\d{4}"} — 4 chiffres</span>
+                  <span>{"alice.*order"} — séquence</span>
+                  <span>{"(?i)ERROR"} — insensible casse</span>
+                  <span>{"amount\":\\s*\\d+"} — champ JSON</span>
+                </div>
+              </div>
+            )}
+            <button onClick={() => run("search")} disabled={!topic||!searchQuery||loading}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-kafka-accent hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
               <Search size={14} />{loading ? "Recherche..." : "Rechercher"}
             </button>
@@ -313,55 +373,64 @@ export default function Messages({ cluster }) {
 
         {/* ── EXPORT ── */}
         {tab === "export" && (
-          <div className="flex gap-3">
-            <button onClick={() => run("export-json")} disabled={!topic || loading}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
-              <Download size={14} /> Export JSON
-            </button>
-            <button onClick={() => run("export-csv")} disabled={!topic || loading}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600/80 hover:bg-green-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
-              <Download size={14} /> Export CSV
-            </button>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-slate-400">Nombre de messages :</label>
+              <select value={exportLimit} onChange={e => setExportLimit(Number(e.target.value))}
+                className="bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-kafka-accent transition">
+                {[100, 200, 500, 1000].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => run("export-json")} disabled={!topic||loading}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                <Download size={14} /> JSON
+              </button>
+              <button onClick={() => run("export-csv")} disabled={!topic||loading}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600/80 hover:bg-green-600 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
+                <Download size={14} /> CSV
+              </button>
+            </div>
           </div>
         )}
 
         {/* ── VALIDATION ── */}
         {tab === "validate" && (
           <div className="space-y-3">
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Schéma JSON (champs requis)</label>
-              <textarea value={schema} onChange={e => setSchema(e.target.value)}
-                rows={4}
-                className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
-            </div>
-            <div className="flex gap-3 items-center">
+            <label className="text-xs text-slate-400 block">Schéma JSON</label>
+            <textarea value={schema} onChange={e => setSchema(e.target.value)} rows={4}
+              className="w-full bg-kafka-bg border border-kafka-border rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-kafka-accent transition resize-none" />
+            <div className="flex items-center gap-3">
               <span className="text-xs text-slate-400">Valider</span>
-              <input type="number" value={validateLimit} onChange={e => setValidateLimit(Number(e.target.value))}
-                min="1" max="200"
-                className="w-24 bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-kafka-accent transition" />
+              <input type="number" value={validateLimit} onChange={e => setValidateLimit(Number(e.target.value))} min="1" max="200"
+                className="w-24 bg-kafka-bg border border-kafka-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none transition" />
               <span className="text-xs text-slate-400">messages</span>
             </div>
-            <button onClick={() => run("validate")} disabled={!topic || loading}
+            <button onClick={() => run("validate")} disabled={!topic||loading}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-kafka-accent hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-sm font-medium transition">
-              <CheckCircle size={14} />{loading ? "Validation..." : "Valider les messages"}
+              <CheckCircle size={14} />{loading ? "Validation..." : "Valider"}
             </button>
           </div>
         )}
 
-        {/* Messages de retour */}
-        {error && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-            <p className="text-green-400 text-sm">{success}</p>
-          </div>
-        )}
+        {error   && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg"><p className="text-red-400 text-sm">{error}</p></div>}
+        {success && <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg"><p className="text-green-400 text-sm">{success}</p></div>}
       </div>
 
-      {/* ── Résultat validation ── */}
+      {/* Stats */}
+      {tab === "browse" && total > 0 && (
+        <div className="flex items-center justify-between px-1 text-xs text-slate-500">
+          <span>{total.toLocaleString()} messages au total · page {page + 1}/{totalPages}</span>
+          <span>{messages.length} affichés</span>
+        </div>
+      )}
+      {tab === "search" && searchTotal > 0 && (
+        <div className="px-1 text-xs text-slate-500">
+          {searchTotal.toLocaleString()} résultat(s) · page {searchPage + 1}/{searchPages}
+        </div>
+      )}
+
+      {/* Validation result */}
       {validationResult && (
         <div className="bg-kafka-surface border border-kafka-border rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-kafka-border flex items-center gap-4">
@@ -372,78 +441,43 @@ export default function Messages({ cluster }) {
             <div className="flex items-center gap-4 text-sm">
               <span className="text-green-400 font-mono">{validationResult.valid} valides</span>
               <span className="text-red-400 font-mono">{validationResult.invalid} invalides</span>
-              <span className={`text-lg font-bold ${
-                validationResult.score >= 90 ? "text-green-400" :
-                validationResult.score >= 70 ? "text-yellow-400" : "text-red-400"
-              }`}>{validationResult.score}%</span>
+              <span className={`text-lg font-bold ${validationResult.score >= 90 ? "text-green-400" : validationResult.score >= 70 ? "text-yellow-400" : "text-red-400"}`}>
+                {validationResult.score}%
+              </span>
             </div>
           </div>
-          {/* Barre de score */}
-          <div className="px-5 py-3 border-b border-kafka-border">
+          <div className="px-5 py-2 border-b border-kafka-border">
             <div className="w-full bg-kafka-bg rounded-full h-2">
-              <div className={`h-2 rounded-full transition-all ${
-                validationResult.score >= 90 ? "bg-green-500" :
-                validationResult.score >= 70 ? "bg-yellow-500" : "bg-red-500"
-              }`} style={{ width: `${validationResult.score}%` }} />
+              <div className={`h-2 rounded-full ${validationResult.score >= 90 ? "bg-green-500" : validationResult.score >= 70 ? "bg-yellow-500" : "bg-red-500"}`}
+                style={{ width: `${validationResult.score}%` }} />
             </div>
           </div>
-          {/* Messages invalides */}
-          {validationResult.results.filter(r => !r.valid).length > 0 && (
-            <div className="divide-y divide-kafka-border max-h-64 overflow-y-auto">
-              {validationResult.results.filter(r => !r.valid).map((r, i) => (
-                <div key={i} className="px-5 py-3 flex items-start gap-3">
-                  <XCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-slate-400">
-                      Partition {r.partition} · Offset {r.offset}
-                    </p>
-                    <p className="text-red-400 text-xs mt-0.5">{r.error}</p>
-                    <p className="text-slate-600 text-xs font-mono mt-1 truncate">{r.value}</p>
-                  </div>
+          <div className="divide-y divide-kafka-border max-h-64 overflow-y-auto">
+            {validationResult.results.filter(r => !r.valid).map((r, i) => (
+              <div key={i} className="px-5 py-3 flex items-start gap-3">
+                <XCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-400">P{r.partition} · offset {r.offset}</p>
+                  <p className="text-red-400 text-xs mt-0.5">{r.error}</p>
+                  <p className="text-slate-600 text-xs font-mono mt-1 truncate">{r.value}</p>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── Liste de messages ── */}
-      {messages.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-slate-500 text-xs">{messages.length} message(s)</p>
-          </div>
-          {messages.map((msg, i) => (
-            <div key={i} className="bg-kafka-surface border border-kafka-border rounded-xl overflow-hidden">
-              <button onClick={() => setExpanded(expanded === i ? null : i)}
-                className="w-full px-5 py-3 flex items-center gap-3 hover:bg-kafka-bg/50 transition text-left">
-                <span className="text-xs px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded font-mono shrink-0">
-                  P{msg.partition}
-                </span>
-                <span className="text-xs text-slate-500 font-mono shrink-0">+{msg.offset}</span>
-                {msg.key && (
-                  <span className="text-xs text-slate-400 font-mono shrink-0">
-                    <span className="text-slate-600">key:</span> {msg.key}
-                  </span>
-                )}
-                <span className="text-xs text-slate-600 font-mono truncate flex-1">
-                  {msg.value?.substring(0, 80)}{msg.value?.length > 80 ? "…" : ""}
-                </span>
-                <span className="text-xs text-slate-700 shrink-0">
-                  {new Date(msg.timestamp).toLocaleTimeString("fr-FR")}
-                </span>
-                <ChevronDown size={13} className={`text-slate-500 shrink-0 transition-transform ${expanded === i ? "rotate-180" : ""}`} />
-              </button>
-              {expanded === i && (
-                <div className="px-5 pb-4 border-t border-kafka-border">
-                  <pre className="mt-3 text-xs text-green-400 bg-kafka-bg rounded-lg p-4 overflow-x-auto font-mono leading-relaxed">
-                    {tryJson(msg.value) || "(vide)"}
-                  </pre>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      {/* Messages */}
+      <MessageList messages={messages} />
+
+      {/* Pagination browse */}
+      {tab === "browse" && totalPages > 1 && (
+        <Pagination page={page} totalPages={totalPages} onPage={(p) => loadPage(p)} />
+      )}
+
+      {/* Pagination search */}
+      {tab === "search" && searchPages > 1 && (
+        <Pagination page={searchPage} totalPages={searchPages} onPage={(p) => loadSearchPage(p)} />
       )}
 
       {messages.length === 0 && !loading && !validationResult && tab !== "produce" && (

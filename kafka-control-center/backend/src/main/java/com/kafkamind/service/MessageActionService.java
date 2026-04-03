@@ -10,28 +10,27 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class MessageActionService {
 
-    private static final int MAX_MESSAGES = 500;
-    private static final int TIMEOUT_MS   = 5000;
+    private static final int MAX_MESSAGES = 1000;
+    private static final int TIMEOUT_MS   = 8000;
 
-    // ─── Replay depuis offset ou timestamp ───────────────────────────────────
+    // ─── Replay ──────────────────────────────────────────────────────────────
 
     public List<MessageDto> replay(KafkaCluster cluster, String topic,
                                     String startFrom, int limit) throws Exception {
         limit = Math.min(limit, MAX_MESSAGES);
         Properties props = buildConsumerProps(cluster);
-
         try (var consumer = new KafkaConsumer<String, String>(props)) {
             var partitions = getPartitions(consumer, topic);
             consumer.assign(partitions);
-
             if (startFrom.startsWith("ts:")) {
-                // Replay depuis un timestamp
                 long ts = Long.parseLong(startFrom.substring(3));
                 Map<TopicPartition, Long> tsMap = new HashMap<>();
                 partitions.forEach(tp -> tsMap.put(tp, ts));
@@ -45,16 +44,14 @@ public class MessageActionService {
             } else if (startFrom.equals("latest")) {
                 consumer.seekToEnd(partitions);
             } else {
-                // Offset numérique
                 long offset = Long.parseLong(startFrom);
                 partitions.forEach(tp -> consumer.seek(tp, offset));
             }
-
             return pollMessages(consumer, limit);
         }
     }
 
-    // ─── Produire un message ──────────────────────────────────────────────────
+    // ─── Produire ─────────────────────────────────────────────────────────────
 
     public void produce(KafkaCluster cluster, String topic,
                          String key, String value, Map<String, String> headers) throws Exception {
@@ -64,7 +61,6 @@ public class MessageActionService {
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");
         props.put(ProducerConfig.ACKS_CONFIG,                   "all");
         addSasl(props, cluster);
-
         try (var producer = new KafkaProducer<String, String>(props)) {
             var record = new ProducerRecord<>(topic, key, value);
             if (headers != null) {
@@ -75,10 +71,9 @@ public class MessageActionService {
         }
     }
 
-    // ─── DLQ — liste les topics DLQ et leurs messages ────────────────────────
+    // ─── DLQ ─────────────────────────────────────────────────────────────────
 
     public List<MessageDto> getDlqMessages(KafkaCluster cluster, String topic, int limit) throws Exception {
-        // Cherche le topic DLQ correspondant
         String dlqTopic = resolveDlqTopic(cluster, topic);
         return peekFromTopic(cluster, dlqTopic, limit);
     }
@@ -90,29 +85,54 @@ public class MessageActionService {
                 .filter(t -> t.contains(".dlq") || t.contains("-dlq") ||
                              t.contains(".DLQ") || t.contains("-DLQ") ||
                              t.contains("dead-letter") || t.contains("deadletter"))
-                .sorted()
-                .collect(Collectors.toList());
+                .sorted().collect(Collectors.toList());
         }
     }
 
-    // ─── Recherche full-text ──────────────────────────────────────────────────
+    // ─── Recherche avec Regex ─────────────────────────────────────────────────
 
-    public List<MessageDto> search(KafkaCluster cluster, String topic,
-                                    String query, int limit) throws Exception {
-        // Lit tous les messages et filtre
+    public SearchResult search(KafkaCluster cluster, String topic,
+                                String query, boolean useRegex,
+                                int page, int pageSize) throws Exception {
         List<MessageDto> all = peekFromTopic(cluster, topic, MAX_MESSAGES);
-        String q = query.toLowerCase();
-        return all.stream()
-            .filter(m -> {
+        List<MessageDto> filtered;
+
+        if (useRegex) {
+            try {
+                Pattern pattern = Pattern.compile(query, Pattern.CASE_INSENSITIVE);
+                filtered = all.stream().filter(m -> {
+                    String val = m.getValue() != null ? m.getValue() : "";
+                    String key = m.getKey()   != null ? m.getKey()   : "";
+                    return pattern.matcher(val).find() || pattern.matcher(key).find();
+                }).collect(Collectors.toList());
+            } catch (PatternSyntaxException e) {
+                throw new IllegalArgumentException("Expression régulière invalide : " + e.getMessage());
+            }
+        } else {
+            String q = query.toLowerCase();
+            filtered = all.stream().filter(m -> {
                 String val = m.getValue() != null ? m.getValue().toLowerCase() : "";
                 String key = m.getKey()   != null ? m.getKey().toLowerCase()   : "";
                 return val.contains(q) || key.contains(q);
-            })
-            .limit(limit)
-            .collect(Collectors.toList());
+            }).collect(Collectors.toList());
+        }
+
+        int total      = filtered.size();
+        int totalPages = pageSize > 0 ? (int) Math.ceil((double) total / pageSize) : 1;
+        int from       = Math.min(page * pageSize, total);
+        int to         = Math.min(from + pageSize, total);
+        List<MessageDto> pageData = filtered.subList(from, to);
+
+        return new SearchResult(pageData, total, page, totalPages, pageSize, query, useRegex);
     }
 
-    // ─── Export CSV ou JSON ───────────────────────────────────────────────────
+    public record SearchResult(
+        List<MessageDto> messages,
+        int total, int page, int totalPages,
+        int pageSize, String query, boolean regex
+    ) {}
+
+    // ─── Export ───────────────────────────────────────────────────────────────
 
     public String exportCsv(KafkaCluster cluster, String topic, int limit) throws Exception {
         List<MessageDto> messages = peekFromTopic(cluster, topic, limit);
@@ -132,54 +152,35 @@ public class MessageActionService {
         return peekFromTopic(cluster, topic, limit);
     }
 
-    // ─── Validation de schéma JSON ────────────────────────────────────────────
+    // ─── Validation schéma ────────────────────────────────────────────────────
 
     public List<ValidationResult> validateSchema(KafkaCluster cluster, String topic,
                                                    String schema, int limit) throws Exception {
         List<MessageDto> messages = peekFromTopic(cluster, topic, limit);
-        List<ValidationResult> results = new ArrayList<>();
-
-        for (var m : messages) {
-            var result = validateJsonMessage(m, schema);
-            results.add(result);
-        }
-        return results;
+        return messages.stream().map(m -> validateJsonMessage(m, schema)).collect(Collectors.toList());
     }
 
-    public record ValidationResult(
-        long offset, int partition,
-        boolean valid, String error, String value
-    ) {}
+    public record ValidationResult(long offset, int partition, boolean valid, String error, String value) {}
 
     private ValidationResult validateJsonMessage(MessageDto m, String schema) {
         String value = m.getValue();
-        if (value == null || value.isBlank()) {
-            return new ValidationResult(m.getOffset(), m.getPartition(),
-                false, "Message vide", value);
-        }
-        // Validation JSON basique
+        if (value == null || value.isBlank())
+            return new ValidationResult(m.getOffset(), m.getPartition(), false, "Message vide", value);
         value = value.trim();
-        if (!value.startsWith("{") && !value.startsWith("[")) {
-            return new ValidationResult(m.getOffset(), m.getPartition(),
-                false, "Pas un JSON valide", value);
-        }
+        if (!value.startsWith("{") && !value.startsWith("["))
+            return new ValidationResult(m.getOffset(), m.getPartition(), false, "Pas un JSON valide", value);
         try {
-            // Parse JSON simple
-            new com.fasterxml.jackson.databind.ObjectMapper().readTree(value);
-
-            // Vérifie les champs requis si schéma fourni
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.readTree(value);
             if (schema != null && !schema.isBlank()) {
-                var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 var schemaNode = mapper.readTree(schema);
                 var msgNode    = mapper.readTree(value);
-
                 if (schemaNode.has("required")) {
                     for (var req : schemaNode.get("required")) {
                         String field = req.asText();
-                        if (!msgNode.has(field)) {
+                        if (!msgNode.has(field))
                             return new ValidationResult(m.getOffset(), m.getPartition(),
                                 false, "Champ manquant : " + field, value);
-                        }
                     }
                 }
             }
@@ -190,12 +191,42 @@ public class MessageActionService {
         }
     }
 
+    // ─── Lecture paginée ──────────────────────────────────────────────────────
+
+    public PagedMessages getPagedMessages(KafkaCluster cluster, String topic,
+                                           int page, int pageSize) throws Exception {
+        pageSize = Math.min(pageSize, 100);
+        int offset = page * pageSize;
+        int needed = offset + pageSize;
+
+        Properties props = buildConsumerProps(cluster);
+        try (var adminConsumer = new KafkaConsumer<String, String>(props)) {
+            var partitions  = getPartitions(adminConsumer, topic);
+            var endOffsets  = adminConsumer.endOffsets(partitions);
+            long totalMsgs  = endOffsets.values().stream().mapToLong(Long::longValue).sum();
+
+            int totalPages  = pageSize > 0 ? (int) Math.ceil((double) totalMsgs / pageSize) : 1;
+
+            List<MessageDto> all = peekFromTopic(cluster, topic, needed);
+            int from = Math.min(offset, all.size());
+            int to   = Math.min(offset + pageSize, all.size());
+            List<MessageDto> pageData = all.subList(from, to);
+
+            return new PagedMessages(pageData, totalMsgs, page, totalPages, pageSize);
+        }
+    }
+
+    public record PagedMessages(
+        List<MessageDto> messages,
+        long total, int page, int totalPages, int pageSize
+    ) {}
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private List<MessageDto> peekFromTopic(KafkaCluster cluster, String topic, int limit) throws Exception {
+    public List<MessageDto> peekFromTopic(KafkaCluster cluster, String topic, int limit) throws Exception {
         Properties props = buildConsumerProps(cluster);
         try (var consumer = new KafkaConsumer<String, String>(props)) {
-            var partitions = getPartitions(consumer, topic);
+            var partitions   = getPartitions(consumer, topic);
             consumer.assign(partitions);
             var beginOffsets = consumer.beginningOffsets(partitions);
             var endOffsets   = consumer.endOffsets(partitions);
@@ -231,26 +262,24 @@ public class MessageActionService {
     }
 
     private String resolveDlqTopic(KafkaCluster cluster, String topic) throws Exception {
-        // Cherche topic DLQ associé : topic.dlq, topic-dlq, topic.DLQ
         Properties props = buildConsumerProps(cluster);
         try (var consumer = new KafkaConsumer<String, String>(props)) {
             var allTopics = consumer.listTopics().keySet();
-            for (String suffix : List.of(".dlq", "-dlq", ".DLQ", "-DLQ", "-dead-letter")) {
+            for (String suffix : List.of(".dlq", "-dlq", ".DLQ", "-DLQ", "-dead-letter"))
                 if (allTopics.contains(topic + suffix)) return topic + suffix;
-            }
         }
-        return topic + ".dlq"; // fallback
+        return topic + ".dlq";
     }
 
     private Properties buildConsumerProps(KafkaCluster cluster) {
         Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,          cluster.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG,                   "kafkamind-action-" + UUID.randomUUID());
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,     "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,   "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,         false);
-        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,           MAX_MESSAGES);
-        props.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG,         3000);
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,         cluster.getBootstrapServers());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG,                  "kafkamind-action-" + UUID.randomUUID());
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,    "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,  "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,        false);
+        props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,          MAX_MESSAGES);
+        props.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG,        3000);
         addSasl(props, cluster);
         return props;
     }
@@ -268,9 +297,8 @@ public class MessageActionService {
 
     private String escapeCsv(String val) {
         if (val == null) return "";
-        if (val.contains(",") || val.contains("\"") || val.contains("\n")) {
+        if (val.contains(",") || val.contains("\"") || val.contains("\n"))
             return "\"" + val.replace("\"", "\"\"") + "\"";
-        }
         return val;
     }
 }

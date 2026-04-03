@@ -177,7 +177,7 @@ events = ['order.placed','user.created','payment.success','order.shipped','user.
 users  = ['alice','bob','charlie','diana','eve']
 for i in range(1, 100001):
     print(json.dumps({'id':str(i),'event':random.choice(events),'userId':random.choice(users),'amount':round(random.uniform(10,500),2)}))
-" > ~/messages-1000.json
+" > ~/messages-100000.json
 ubuntu@ali:~/kafka-control-center/kafka-control-center$ docker cp ~/messages-1000.json kafka-control-center-kafka-1:/tmp/messages-1000.json
 Successfully copied 7.79MB to kafka-control-center-kafka-1:/tmp/messages-1000.json
 ubuntu@ali:~/kafka-control-center/kafka-control-center$ docker exec kafka-control-center-kafka-1 \
@@ -186,3 +186,28 @@ ubuntu@ali:~/kafka-control-center/kafka-control-center$ docker exec kafka-contro
   --topic stream-source < /tmp/messages-1000.json"
 ubuntu@ali:~/kafka-control-center/kafka-control-center$
 _____________________________________________________________________________________________________
+______________________________________________________________________________________________________
+Voici le détail des actions les plus impactantes par profil :
+## Profil Métier / Dev — à implémenter en priorité
+# Replay 
+— rejouer des messages depuis un offset précis ou une date. Cas réel : un bug en production a mal traité des commandes, on rejoue les 2 dernières heures pour recorriger sans reprise manuelle.
+# Produire manuellement 
+— injecter un message depuis l'IHM sans écrire de code. Cas réel : les équipes QA peuvent tester un consumer sans passer par un dev.
+# DLQ Viewer 
+— visualiser et rejouer les messages en dead letter queue. Cas réel : une banque doit traiter manuellement les virements rejetés.
+# Export CSV/JSON 
+— exporter un échantillon de messages. Cas réel : le métier veut analyser les commandes du jour dans Excel.
+## Profil DSI / Ops
+# Diff topics 
+— comparer les messages entre source et destination après migration. Cas réel : valider qu'aucun message n'a été perdu lors d'une migration Blue/Green.
+# Latence end-to-end 
+— mesurer le délai entre production et consommation. Cas réel : SLA contractuel de traitement < 500ms à démontrer.
+# Purge ciblée 
+— supprimer des messages par clé ou plage de timestamps. Cas réel : un client demande la suppression de ses données RGPD dans les événements.
+## Profil Conformité / RSSI
+# Masquage RGPD 
+— anonymiser les champs PII (email, téléphone, IBAN) à la volée avant affichage. Cas réel : obligation légale dans tous les secteurs.
+# Audit log 
+— tracer qui a lu quel message et quand. Cas réel : exigence PCI-DSS pour les données de paiement.
+# Rétention légale 
+— configurer automatiquement la rétention à 7 ans pour la comptabilité, 5 ans pour la banque.

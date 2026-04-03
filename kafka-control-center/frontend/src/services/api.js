@@ -48,14 +48,22 @@ export const topicApi = {
 };
 
 export const messageApi = {
-  replay:         (cid, topic, startFrom, limit)    => api.post(`/clusters/${cid}/topics/${topic}/replay`, { startFrom, limit }),
-  produce:        (cid, topic, key, value, headers) => api.post(`/clusters/${cid}/topics/${topic}/produce`, { key, value, headers }),
-  listDlq:        (cid)                             => api.get(`/clusters/${cid}/dlq`),
-  getDlqMessages: (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/dlq?limit=${limit}`),
-  search:         (cid, topic, q, limit)            => api.get(`/clusters/${cid}/topics/${topic}/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  exportCsv:      (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/export?format=csv&limit=${limit}`, { responseType: "text" }),
-  exportJson:     (cid, topic, limit)               => api.get(`/clusters/${cid}/topics/${topic}/export?format=json&limit=${limit}`),
-  validate:       (cid, topic, schema, limit)       => api.post(`/clusters/${cid}/topics/${topic}/validate`, { schema, limit }),
+  pagedMessages:  (cid, topic, page, pageSize) =>
+    api.get(`/clusters/${cid}/topics/${topic}/messages/paged?page=${page}&pageSize=${pageSize}`),
+  replay:         (cid, topic, startFrom, limit) =>
+    api.post(`/clusters/${cid}/topics/${topic}/replay`, { startFrom, limit }),
+  produce:        (cid, topic, key, value, headers) =>
+    api.post(`/clusters/${cid}/topics/${topic}/produce`, { key, value, headers }),
+  listDlq:        (cid)                    => api.get(`/clusters/${cid}/dlq`),
+  getDlqMessages: (cid, topic, limit)      => api.get(`/clusters/${cid}/topics/${topic}/dlq?limit=${limit}`),
+  search:         (cid, topic, q, regex, page, pageSize) =>
+    api.get(`/clusters/${cid}/topics/${topic}/search?q=${encodeURIComponent(q)}&regex=${regex}&page=${page}&pageSize=${pageSize}`),
+  exportCsv:      (cid, topic, limit)      =>
+    api.get(`/clusters/${cid}/topics/${topic}/export?format=csv&limit=${limit}`, { responseType: "text" }),
+  exportJson:     (cid, topic, limit)      =>
+    api.get(`/clusters/${cid}/topics/${topic}/export?format=json&limit=${limit}`),
+  validate:       (cid, topic, schema, limit) =>
+    api.post(`/clusters/${cid}/topics/${topic}/validate`, { schema, limit }),
 };
 
 export const groupApi = {
@@ -64,14 +72,16 @@ export const groupApi = {
 };
 
 export const streamApi = {
-  list:    ()         => api.get("/streaming"),
-  create:  (data)     => api.post("/streaming", data),
-  update:  (id, data) => api.put(`/streaming/${id}`, data),
-  delete:  (id)       => api.delete(`/streaming/${id}`),
-  start:   (id)       => api.post(`/streaming/${id}/start`),
-  stop:    (id)       => api.post(`/streaming/${id}/stop`),
-  pause:   (id)       => api.post(`/streaming/${id}/pause`),
-  metrics: (id)       => api.get(`/streaming/${id}/metrics`),
+  list:              ()         => api.get("/streaming"),
+  create:            (data)     => api.post("/streaming", data),
+  update:            (id, data) => api.put(`/streaming/${id}`, data),
+  delete:            (id)       => api.delete(`/streaming/${id}`),
+  duplicate:         (id)       => api.post(`/streaming/${id}/duplicate`),
+  start:             (id)       => api.post(`/streaming/${id}/start`),
+  stop:              (id)       => api.post(`/streaming/${id}/stop`),
+  pause:             (id)       => api.post(`/streaming/${id}/pause`),
+  metrics:           (id)       => api.get(`/streaming/${id}/metrics`),
+  topicsForCluster:  (clusterId)=> api.get(`/streaming/cluster-topics/${clusterId}`),
 };
 
 export const aiApi = {
